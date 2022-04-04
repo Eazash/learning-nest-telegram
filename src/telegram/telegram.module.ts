@@ -1,25 +1,67 @@
 import { HttpModule } from '@nestjs/axios';
-import { Module, DynamicModule, Provider } from '@nestjs/common';
-import { TELEGRAM_MODULE_OPTIONS } from './constants';
+import { BullModule, InjectQueue } from '@nestjs/bull';
 import {
-  TelegramModuleOptions,
+  DynamicModule,
+  Module,
+  OnModuleDestroy,
+  OnModuleInit,
+  Provider,
+} from '@nestjs/common';
+import { Queue } from 'bull';
+import { of, repeat, retry, Subscription, switchMap } from 'rxjs';
+import { MessageEntityType, TELEGRAM_MODULE_OPTIONS } from './constants';
+import { CommandConsumer } from './consumers/command.consumer';
+import * as Telegram from './interfaces/telegram-api.interface';
+import {
   TelegramModuleAsyncOptions,
+  TelegramModuleOptions,
 } from './interfaces/telegram-options.interface';
 import { TelegramService } from './telegram.service';
 
 @Module({})
-export class TelegramModule {
+export class TelegramModule implements OnModuleInit, OnModuleDestroy {
+  private offset: number;
+  updates$: Subscription;
+  constructor(
+    @InjectQueue('command') private commandQueue: Queue,
+    private telegramService: TelegramService,
+  ) {}
+  onModuleDestroy() {
+    this.updates$?.unsubscribe();
+  }
+  onModuleInit() {
+    this.updates$ = of({})
+      .pipe(
+        switchMap((_) => this.telegramService.getUpdates()),
+        repeat(),
+        retry(3),
+      )
+      .subscribe({
+        next: (updates) =>
+          updates.forEach((update) => this.jobProducer(update)),
+      });
+  }
+  private jobProducer(update: Telegram.Update): void {
+    if (
+      update?.message?.entities?.some(
+        (entity) => entity.type === MessageEntityType.COMMAND,
+      )
+    ) {
+      this.commandQueue.add(update.message);
+    }
+  }
   static forRoot(options: TelegramModuleOptions): DynamicModule {
     return {
       module: TelegramModule,
       global: true,
-      imports: [HttpModule],
+      imports: [HttpModule, ...this.createQueueModules(['command'])],
       providers: [
         {
           provide: TELEGRAM_MODULE_OPTIONS,
           useValue: options,
         },
         TelegramService,
+        CommandConsumer,
       ],
       exports: [TelegramService],
     };
@@ -27,8 +69,12 @@ export class TelegramModule {
   static forRootAsync(options: TelegramModuleAsyncOptions): DynamicModule {
     return {
       module: TelegramModule,
-      imports: options.imports || [],
-      providers: this.createAsyncProviders(options),
+      imports: [
+        ...options.imports,
+        HttpModule,
+        ...this.createQueueModules(['command']),
+      ] || [HttpModule],
+      providers: [CommandConsumer, ...this.createAsyncProviders(options)],
     };
   }
   private static createAsyncProviders(
@@ -42,5 +88,12 @@ export class TelegramModule {
       },
       TelegramService,
     ];
+  }
+  private static createQueueModules(names: string[]): DynamicModule[] {
+    return names.map((name) =>
+      BullModule.registerQueue({
+        name,
+      }),
+    );
   }
 }
