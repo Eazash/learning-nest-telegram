@@ -12,6 +12,11 @@ export interface SendMessageParams {
   text: string;
 }
 
+export interface SendDocumentParams {
+  chat_id: number;
+  file_path: string;
+}
+
 export interface Update {
   update_id: number;
   message?: Message;
@@ -21,6 +26,7 @@ export interface Message {
   message_id: number;
   from?: User;
   entities: MessageEntity[];
+  text?: string;
   chat: Chat;
 }
 

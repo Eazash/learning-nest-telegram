@@ -9,7 +9,11 @@ import {
 } from '@nestjs/common';
 import { Queue } from 'bull';
 import { of, repeat, retry, Subscription, switchMap } from 'rxjs';
-import { MessageEntityType, TELEGRAM_MODULE_OPTIONS } from './constants';
+import {
+  Command,
+  MessageEntityType,
+  TELEGRAM_MODULE_OPTIONS,
+} from './constants';
 import { CommandConsumer } from './consumers/command.consumer';
 import * as Telegram from './interfaces/telegram-api.interface';
 import {
@@ -47,7 +51,27 @@ export class TelegramModule implements OnModuleInit, OnModuleDestroy {
         (entity) => entity.type === MessageEntityType.COMMAND,
       )
     ) {
-      this.commandQueue.add(update.message);
+      const commandEntity = update.message.entities.find(
+        (entity) => entity.type === MessageEntityType.COMMAND,
+      );
+      const command = update.message.text.substring(
+        commandEntity.offset,
+        commandEntity.length,
+      );
+      switch (command) {
+        case Command.START:
+          this.commandQueue.add('greet', update.message.from);
+          break;
+        case Command.FILE:
+          this.commandQueue.add('file', update.message.from);
+          break;
+        case Command.PHOTO:
+          this.commandQueue.add('photo', update.message.from);
+          break;
+        default:
+          this.commandQueue.add([command, update.message.from]);
+          break;
+      }
     }
   }
   static forRoot(options: TelegramModuleOptions): DynamicModule {

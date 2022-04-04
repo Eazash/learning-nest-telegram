@@ -22,3 +22,9 @@ export enum ChatType {
   SUPERGROUP = 'supergroup',
   CHANNEL = 'channel',
 }
+
+export enum Command {
+  START = '/start',
+  FILE = '/file',
+  PHOTO = '/photo',
+}

@@ -1,15 +1,20 @@
+import { HttpService } from '@nestjs/axios';
 import {
-  Injectable,
   Inject,
+  Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { TELEGRAM_MODULE_OPTIONS, TELEGRAM_API_URL } from './constants';
-import * as Telegram from './interfaces/telegram-api.interface';
-import { TelegramModuleOptions } from './interfaces/telegram-options.interface';
 import { AxiosRequestConfig } from 'axios';
+import * as FormData from 'form-data';
+import { createReadStream } from 'fs';
 import { map, Observable, tap } from 'rxjs';
-import { HttpService } from '@nestjs/axios';
-import { SendMessageParams } from './interfaces/telegram-api.interface';
+import { TELEGRAM_API_URL, TELEGRAM_MODULE_OPTIONS } from './constants';
+import * as Telegram from './interfaces/telegram-api.interface';
+import {
+  SendDocumentParams,
+  SendMessageParams,
+} from './interfaces/telegram-api.interface';
+import { TelegramModuleOptions } from './interfaces/telegram-options.interface';
 
 @Injectable()
 export class TelegramService {
@@ -55,5 +60,26 @@ export class TelegramService {
   }
   sendMessage(data: SendMessageParams) {
     return this.makeCall<Telegram.Message>(this.sendMessage.name, data);
+  }
+
+  sendDocument(data: SendDocumentParams) {
+    const payload = new FormData();
+    payload.append('chat_id', data.chat_id);
+    payload.append('document', createReadStream(data.file_path));
+    return this.makeCall<Telegram.Message>(this.sendDocument.name, payload, {
+      headers: {
+        ...payload.getHeaders(),
+      },
+    });
+  }
+  sendPhoto(data: SendDocumentParams) {
+    const payload = new FormData();
+    payload.append('chat_id', data.chat_id);
+    payload.append('photo', createReadStream(data.file_path));
+    return this.makeCall<Telegram.Message>(this.sendPhoto.name, payload, {
+      headers: {
+        ...payload.getHeaders(),
+      },
+    });
   }
 }
